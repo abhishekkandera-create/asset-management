@@ -11,9 +11,9 @@ the front, with a shared package holding the contract between them.
 | | |
 |---|---|
 | **Phases complete** | 3 of 8 |
-| **Tests** | 244 passing (142 unit, 102 integration) |
+| **Tests** | 270 passing (160 unit, 110 integration) |
 | **Database tables** | 10 |
-| **API endpoints** | 40 |
+| **API endpoints** | 43 |
 | **Demo fixture** | 200 assets · 60 employees · 120 assignments · 452 events |
 
 📖 **[Read the handbook](https://claude.ai/code/artifact/a1a5090a-ae21-43c7-b29a-3d36914322c5)** — a
@@ -97,6 +97,26 @@ refuses to let them be marked as exited while anything is outstanding. Each
 blocking item can be returned or written off from here.
 
 ![Employee clearance](docs/screenshots/06-employee-clearance.png)
+
+### Models and specifications
+
+Specs live on the **model**, not on each unit — every Dell Latitude 5440 has the
+same processor — so one edit updates what every asset of that model shows. The
+column is free-form JSON, because a laptop and a charger share no fields worth
+naming.
+
+The editor is a key/value list rather than a fixed form, and known names are
+labelled and given units automatically: type `ramGb` and `16`, and the asset page
+shows **Memory · 16 GB**. `storageGb: 1024` renders as **1 TB**. Anything it
+doesn't recognise still displays, so a new attribute never silently disappears.
+
+![Models and specifications](docs/screenshots/07-models.png)
+
+![Editing specifications](docs/screenshots/08-model-specs-editor.png)
+
+Specifications then appear on every asset of that model:
+
+![Specifications on an asset](docs/screenshots/09-asset-specs.png)
 
 ## How an asset moves
 
@@ -233,10 +253,10 @@ pnpm infra:up / infra:down / infra:reset
 ## Tests
 
 ```
-244 passing
-├── 121 unit (api)   pure, no database, run in ~1s
-├──  21 unit (web)   formatting, CSV escaping, URL normalisation
-└── 102 integration  against a real PostgreSQL 16 container
+270 passing
+├── 123 unit (api)   pure, no database, run in ~1s
+├──  37 unit (web)   spec formatting, dates, CSV escaping, URL normalisation
+└── 110 integration  against a real PostgreSQL 16 container
 ```
 
 The state machine suite covers **all 42 status pairs** — every legal transition

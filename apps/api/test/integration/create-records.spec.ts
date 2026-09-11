@@ -1,11 +1,11 @@
-import { INestApplication } from '@nestjs/common';
+import { type INestApplication } from '@nestjs/common';
 import { AssetEventType, AssetStatus, EmployeeStatus, UserRole } from '@prisma/client';
 import request from 'supertest';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { ErrorCode } from '@asset/shared';
-import { PrismaService } from '../../src/common/prisma/prisma.service';
+import { type PrismaService } from '../../src/common/prisma/prisma.service';
 import { createTestApp, createUser } from '../support/test-app';
-import { World, buildWorld, makeEmployee, resetFixtureCounters } from '../support/fixtures';
+import { type World, buildWorld, makeEmployee, resetFixtureCounters } from '../support/fixtures';
 
 /**
  * Adding an employee who has just joined, and adding the laptop they will be
@@ -260,6 +260,144 @@ describe('creating employees and assets (integration)', () => {
 
     it('is closed to a STORE_KEEPER', async () => {
       await post('/assets', validAsset(), storeKeeperToken).expect(403);
+    });
+  });
+  describe('POST /models and PATCH /models/:id — specifications', () => {
+    const validModel = () => ({
+      categoryId: world.categoryId,
+      manufacturer: 'Lenovo',
+      modelName: 'ThinkPad X1 Carbon Gen 12',
+      specs: { cpu: 'Intel Core Ultra 7 165U', ramGb: 32, storageGb: 1024, screenInches: 14 },
+      defaultWarrantyMonths: 36,
+    });
+
+    it('adds a model with its specifications', async () => {
+      const response = await post('/models', validModel()).expect(201);
+
+      expect(response.body).toMatchObject({
+        manufacturer: 'Lenovo',
+        modelName: 'ThinkPad X1 Carbon Gen 12',
+        defaultWarrantyMonths: 36,
+      });
+      expect(response.body.specs).toEqual({
+        cpu: 'Intel Core Ultra 7 165U',
+        ramGb: 32,
+        storageGb: 1024,
+        screenInches: 14,
+      });
+    });
+
+    it('lets an asset be created against the new model straight away', async () => {
+      const model = await post('/models', validModel()).expect(201);
+
+      const asset = await post('/assets', {
+        assetTag: 'LAP-7777',
+        serialNumber: 'LN777001',
+        modelId: model.body.id,
+        conditionGrade: 'NEW',
+        locationId: world.locationId,
+      }).expect(201);
+
+      // The specs come back on the asset, which is where they are displayed.
+      expect(asset.body.model.specs).toMatchObject({ ramGb: 32 });
+    });
+
+    it('accepts a model with no specifications at all', async () => {
+      const response = await post('/models', {
+        ...validModel(),
+        modelName: 'Unspecced Model',
+        specs: {},
+      }).expect(201);
+
+      expect(response.body.specs).toEqual({});
+    });
+
+    it('keeps numbers and booleans as their own types, not strings', async () => {
+      const response = await post('/models', {
+        ...validModel(),
+        modelName: 'Typed Specs',
+        specs: { ramGb: 16, wireless: true, cpu: 'Intel' },
+      }).expect(201);
+
+      expect(response.body.specs.ramGb).toBe(16);
+      expect(response.body.specs.wireless).toBe(true);
+      expect(response.body.specs.cpu).toBe('Intel');
+    });
+
+    it('rejects a spec value that is not a string, number or boolean', async () => {
+      const response = await post('/models', {
+        ...validModel(),
+        modelName: 'Nested Specs',
+        specs: { cpu: { brand: 'Intel' } },
+      }).expect(400);
+
+      expect(response.body.error.code).toBe(ErrorCode.VALIDATION_FAILED);
+    });
+
+    it('edits specifications, and every asset of the model sees the change', async () => {
+      const model = await post('/models', validModel()).expect(201);
+      const asset = await post('/assets', {
+        assetTag: 'LAP-7778',
+        serialNumber: 'LN777002',
+        modelId: model.body.id,
+        conditionGrade: 'NEW',
+        locationId: world.locationId,
+      }).expect(201);
+
+      await request(app.getHttpServer())
+        .patch(`/api/v1/models/${model.body.id}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ specs: { cpu: 'Intel Core Ultra 9', ramGb: 64 } })
+        .expect(200);
+
+      const refreshed = await request(app.getHttpServer())
+        .get(`/api/v1/assets/${asset.body.id}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .expect(200);
+
+      expect(refreshed.body.model.specs).toEqual({ cpu: 'Intel Core Ultra 9', ramGb: 64 });
+    });
+
+    it('refuses to move a model to another category once it has assets', async () => {
+      // Reclassifying would silently move existing assets across the
+      // serialized/bulk divide.
+      const model = await post('/models', validModel()).expect(201);
+      await post('/assets', {
+        assetTag: 'LAP-7779',
+        serialNumber: 'LN777003',
+        modelId: model.body.id,
+        conditionGrade: 'NEW',
+        locationId: world.locationId,
+      }).expect(201);
+
+      const response = await request(app.getHttpServer())
+        .patch(`/api/v1/models/${model.body.id}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ categoryId: world.bulkCategoryId })
+        .expect(422);
+
+      expect(response.body.error.code).toBe(ErrorCode.RECORD_IN_USE);
+    });
+
+    it('allows recategorising a model that has no assets yet', async () => {
+      const model = await post('/models', validModel()).expect(201);
+
+      await request(app.getHttpServer())
+        .patch(`/api/v1/models/${model.body.id}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ categoryId: world.bulkCategoryId })
+        .expect(200);
+    });
+
+    it('refuses an unknown category', async () => {
+      await post('/models', {
+        ...validModel(),
+        categoryId: '01a0900b-0000-7000-8000-000000000000',
+      }).expect(404);
+    });
+
+    it('is closed to a STORE_KEEPER', async () => {
+      await post('/models', validModel(), storeKeeperToken).expect(403);
     });
   });
 });

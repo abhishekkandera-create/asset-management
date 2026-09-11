@@ -16,6 +16,7 @@ import { allowedTransitions, type Asset, type AssetStatus } from '@asset/shared'
 import { useAsset, useAssetHistory } from '@/hooks/use-assets';
 import { useAuth } from '@/hooks/use-auth';
 import { formatDate, formatDateTime } from '@/lib/utils';
+import { formatSpecs } from '@/lib/specs';
 import { messageOf } from '@/lib/api-error';
 import { StatusBadge } from '@/components/status-badge';
 import { ConditionBadge } from '@/components/condition-badge';
@@ -32,7 +33,7 @@ import {
   RetireDialog,
 } from '@/components/asset-actions/simple-dialogs';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -352,6 +353,8 @@ function AssetHeader({
 }
 
 function AssetOverview({ asset }: { asset: Asset }): JSX.Element {
+  // Specifications live on the model, so every unit of a model shares them.
+  const specs = formatSpecs(asset.model?.specs);
   const warrantyExpired =
     asset.warrantyExpiresOn && new Date(`${asset.warrantyExpiresOn}T00:00:00Z`) < new Date();
 
@@ -396,17 +399,21 @@ function AssetOverview({ asset }: { asset: Asset }): JSX.Element {
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Specifications</CardTitle>
+          <CardDescription>
+            {asset.model?.manufacturer} {asset.model?.modelName}
+          </CardDescription>
         </CardHeader>
         <CardContent>
-          {asset.model?.specs && Object.keys(asset.model.specs).length > 0 ? (
-            <dl className="grid grid-cols-[minmax(0,140px)_1fr] gap-x-4 gap-y-3 text-sm">
-              {Object.entries(asset.model.specs).map(([key, value]) => (
-                <Field key={key} label={humaniseKey(key)} value={String(value)} />
+          {specs.length > 0 ? (
+            <dl className="grid grid-cols-[minmax(0,150px)_1fr] gap-x-4 gap-y-3 text-sm">
+              {specs.map((spec) => (
+                <Field key={spec.key} label={spec.label} value={spec.value} />
               ))}
             </dl>
           ) : (
             <p className="text-sm text-muted-foreground">
-              No specifications recorded for this model.
+              No specifications recorded for this model yet. An admin can add them from
+              Masters &rarr; Models.
             </p>
           )}
         </CardContent>
@@ -433,12 +440,6 @@ function Field({
       </dd>
     </>
   );
-}
-
-/** `screenInches` -> `Screen inches`, for the free-form specs blob. */
-function humaniseKey(key: string): string {
-  const spaced = key.replace(/([A-Z])/g, ' $1').toLowerCase();
-  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
 }
 
 function AssetDetailSkeleton(): JSX.Element {

@@ -167,6 +167,22 @@ You can cancel rather than actually doing it.
 > exited. And `MON-0045` — the monitor he never returned — still shows him in
 > its history. That's the whole point: the trail survives the person leaving."*
 
+## Part 5b — Specifications (1 min, optional)
+
+**Open any laptop → Overview tab.** The Specifications panel shows the
+processor, memory, storage and screen.
+
+> *"Specs live on the model rather than on each laptop, because every Latitude
+> 5440 has the same processor. One edit updates every unit."*
+
+**Go to Models** (admin only) to show where they're entered. Point at the
+key/value editor:
+
+> *"It's a free-form list rather than a fixed form, because a laptop and a
+> charger share no fields worth naming. But known names get labelled and given
+> units automatically — you type ramGb and 16, the asset page says Memory, 16 GB.
+> A thousand-and-twenty-four gigabytes shows as 1 TB."*
+
 ## Part 6 — Roles (1 min, optional)
 
 Sign out, sign in as `viewer@example.com` / same password.
@@ -201,7 +217,7 @@ If your audience is technical, these land well.
 **3. Show the API docs** (`/api/docs`) if they'd find that interesting — every
 endpoint is generated from the same Zod schemas the frontend validates against.
 
-**4. The test count.** 244 passing: 142 unit, 102 integration against a real
+**4. The test count.** 270 passing: 160 unit, 110 integration against a real
 Postgres container. The state machine suite covers all 42 status pairs, not a
 sample.
 

@@ -1,5 +1,18 @@
-import { useQuery, type UseQueryResult } from '@tanstack/react-query';
-import type { AssetCategory, AssetModel, Location, Paginated, Vendor } from '@asset/shared';
+import {
+  useMutation,
+  useQuery,
+  useQueryClient,
+  type UseQueryResult,
+} from '@tanstack/react-query';
+import type {
+  AssetCategory,
+  AssetModel,
+  CreateAssetModel,
+  Location,
+  Paginated,
+  UpdateAssetModel,
+  Vendor,
+} from '@asset/shared';
 import { api } from '@/lib/api-client';
 
 export const masterKeys = {
@@ -43,5 +56,27 @@ export function useModels(categoryId?: string): UseQueryResult<Paginated<AssetMo
     queryFn: ({ signal }) =>
       api.get<Paginated<AssetModel>>('/models', { pageSize: 100, categoryId }, signal),
     ...REFERENCE_DATA,
+  });
+}
+
+export function useCreateModel() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: CreateAssetModel) => api.post<AssetModel>('/models', body),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['masters', 'models'] });
+    },
+  });
+}
+
+export function useUpdateModel(id: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: UpdateAssetModel) => api.patch<AssetModel>(`/models/${id}`, body),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['masters', 'models'] });
+      // Specs are shown on every asset of this model.
+      void queryClient.invalidateQueries({ queryKey: ['assets'] });
+    },
   });
 }

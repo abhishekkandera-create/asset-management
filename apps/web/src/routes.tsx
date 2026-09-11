@@ -7,6 +7,7 @@ import { AssetsListPage } from '@/pages/assets-list';
 import { AssetDetailPage } from '@/pages/asset-detail';
 import { EmployeesListPage } from '@/pages/employees-list';
 import { EmployeeDetailPage } from '@/pages/employee-detail';
+import { ModelsPage } from '@/pages/models';
 import { NotFoundPage } from '@/pages/not-found';
 
 /**
@@ -27,6 +28,7 @@ export const routes: RouteObject[] = [
           { path: 'assets/:id', element: <AssetDetailPage /> },
           { path: 'employees', element: <EmployeesListPage /> },
           { path: 'employees/:id', element: <EmployeeDetailPage /> },
+          { path: 'masters/models', element: <ModelsPage /> },
           { path: '*', element: <NotFoundPage /> },
         ],
       },

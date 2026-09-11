@@ -2,6 +2,7 @@ import * as React from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import {
   Boxes,
+  Cpu,
   ClipboardList,
   LayoutDashboard,
   LogOut,
@@ -35,6 +36,7 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/purchases', label: 'Purchases', icon: Receipt, minRole: 'ADMIN', comingSoon: true },
   { to: '/repairs', label: 'Repairs', icon: Wrench, comingSoon: true },
   { to: '/reports', label: 'Reports', icon: ClipboardList, comingSoon: true },
+  { to: '/masters/models', label: 'Models', icon: Cpu, minRole: 'ADMIN' },
   { to: '/masters', label: 'Masters', icon: Settings, minRole: 'ADMIN', comingSoon: true },
 ];
 

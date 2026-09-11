@@ -11,7 +11,7 @@ the front, with a shared package holding the contract between them.
 | | |
 |---|---|
 | **Phases complete** | 3 of 8 |
-| **Tests** | 223 passing (121 unit, 102 integration) |
+| **Tests** | 244 passing (142 unit, 102 integration) |
 | **Database tables** | 10 |
 | **API endpoints** | 40 |
 | **Demo fixture** | 200 assets · 60 employees · 120 assignments · 452 events |
@@ -233,8 +233,9 @@ pnpm infra:up / infra:down / infra:reset
 ## Tests
 
 ```
-223 passing
-├── 121 unit         pure, no database, run in ~1s
+244 passing
+├── 121 unit (api)   pure, no database, run in ~1s
+├──  21 unit (web)   formatting, CSV escaping, URL normalisation
 └── 102 integration  against a real PostgreSQL 16 container
 ```
 

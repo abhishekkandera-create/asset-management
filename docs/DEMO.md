@@ -201,7 +201,7 @@ If your audience is technical, these land well.
 **3. Show the API docs** (`/api/docs`) if they'd find that interesting — every
 endpoint is generated from the same Zod schemas the frontend validates against.
 
-**4. The test count.** 223 passing: 121 unit, 102 integration against a real
+**4. The test count.** 244 passing: 142 unit, 102 integration against a real
 Postgres container. The state machine suite covers all 42 status pairs, not a
 sample.
 

@@ -2,7 +2,21 @@ import type { AuthTokens, LoginResponse } from '@asset/shared';
 import { ApiError } from './api-error';
 import { tokenStorage } from './token-storage';
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3000/api/v1';
+/**
+ * Every route lives under `/api/v1`. Pasting just the service origin into
+ * VITE_API_BASE_URL is an easy mistake to make and produces requests to
+ * `/auth/login`, which Nest answers with a bare `Cannot POST /auth/login` that
+ * explains nothing. So the prefix is added when it is missing, and a trailing
+ * slash is trimmed either way.
+ */
+export function normaliseBaseUrl(raw: string): string {
+  const trimmed = raw.trim().replace(/\/+$/, '');
+  return /\/api\/v\d+$/.test(trimmed) ? trimmed : `${trimmed}/api/v1`;
+}
+
+const BASE_URL = normaliseBaseUrl(
+  import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3000/api/v1',
+);
 
 type Query = Record<string, string | number | boolean | string[] | undefined | null>;
 

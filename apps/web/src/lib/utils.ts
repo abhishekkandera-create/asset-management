@@ -5,17 +5,43 @@ export function cn(...inputs: ClassValue[]): string {
   return twMerge(clsx(inputs));
 }
 
-/** Dates display as `11 Sep 2026` throughout the app (CLAUDE.md §9). */
-const DATE_FORMATTER = new Intl.DateTimeFormat('en-IN', {
-  day: '2-digit',
-  month: 'short',
-  year: 'numeric',
-  timeZone: 'Asia/Kolkata',
-});
+/**
+ * Dates display as `11 Sep 2026` throughout the app (CLAUDE.md §9).
+ *
+ * The month names are a constant rather than an Intl lookup: both en-IN and
+ * en-GB abbreviate September to "Sept", four letters where every other month
+ * gives three, which misaligns date columns. The spec asks for DD MMM YYYY, so
+ * the app spells it out.
+ */
+const MONTHS = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+] as const;
 
-const DATE_TIME_FORMATTER = new Intl.DateTimeFormat('en-IN', {
+/**
+ * A `date` column value (`2026-09-11`) — rendered straight from its parts, so
+ * no timezone can shift the day. A calendar date has no time and no zone;
+ * putting it through a Date object only creates opportunities to lose a day.
+ */
+export function formatDate(value: string | null | undefined): string {
+  if (!value) return '—';
+  const parts = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
+  if (!parts) return '—';
+
+  const [, year, month, day] = parts;
+  const name = MONTHS[Number(month) - 1];
+  if (!name) return '—';
+  return `${day} ${name} ${year}`;
+}
+
+/**
+ * A `timestamptz` value — stored in UTC, shown in Asia/Kolkata (CLAUDE.md §2.7).
+ * This one genuinely needs a timezone conversion, so Intl does the arithmetic
+ * and the parts are reassembled to keep the month abbreviation consistent.
+ */
+const INSTANT_PARTS = new Intl.DateTimeFormat('en-GB', {
   day: '2-digit',
-  month: 'short',
+  month: '2-digit',
   year: 'numeric',
   hour: '2-digit',
   minute: '2-digit',
@@ -23,18 +49,18 @@ const DATE_TIME_FORMATTER = new Intl.DateTimeFormat('en-IN', {
   timeZone: 'Asia/Kolkata',
 });
 
-/** A `date` column value (`2026-09-11`) — rendered without any zone shift. */
-export function formatDate(value: string | null | undefined): string {
-  if (!value) return '—';
-  const date = new Date(`${value.slice(0, 10)}T00:00:00Z`);
-  return Number.isNaN(date.getTime()) ? '—' : DATE_FORMATTER.format(date);
-}
-
-/** A `timestamptz` value — stored in UTC, shown in Asia/Kolkata (CLAUDE.md §2.7). */
 export function formatDateTime(value: string | null | undefined): string {
   if (!value) return '—';
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? '—' : DATE_TIME_FORMATTER.format(date);
+  if (Number.isNaN(date.getTime())) return '—';
+
+  const parts = Object.fromEntries(
+    INSTANT_PARTS.formatToParts(date).map((part) => [part.type, part.value]),
+  );
+  const name = MONTHS[Number(parts['month']) - 1];
+  if (!name) return '—';
+
+  return `${parts['day']} ${name} ${parts['year']}, ${parts['hour']}:${parts['minute']} ${(parts['dayPeriod'] ?? '').toLowerCase()}`.trim();
 }
 
 /** Paise are stored as integers and formatted only here (CLAUDE.md §2.6). */

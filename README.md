@@ -10,10 +10,10 @@ users of it.
 
 ## Quick start
 
-Requires Node 20 LTS, pnpm 9 and Docker.
+Requires Node 24 LTS, pnpm 9 and Docker.
 
 ```bash
-nvm use                 # reads .nvmrc (20.20.2)
+nvm use                 # reads .nvmrc (24.21.0)
 cp .env.example .env    # defaults work as-is for local development
 docker compose up -d    # Postgres, Redis, MinIO (bucket created automatically)
 pnpm install
@@ -42,6 +42,12 @@ Then open http://localhost:5173 and sign in.
 This project uses an unusual port block (5442, 5443, 6389, 9010, 9011) to stay
 clear of the defaults, which are commonly taken by other local stacks. Change
 them in `.env` if they clash; `docker-compose.yml` reads the same values.
+
+> **A note on the Node version.** CLAUDE.md §3 specifies Node 20 LTS, which was
+> correct when it was written. Node 20 reached end of life in April 2026, and
+> Vercel now refuses to build on it from 1 October 2026. The project therefore
+> runs on Node 24 LTS. Nothing else about §3 changed, and the full suite passes
+> unchanged on 24.
 
 ## Layout
 

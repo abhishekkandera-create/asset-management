@@ -79,6 +79,27 @@ function instantOn(date: Date, hour: number, minute: number): Date {
   return at;
 }
 
+/**
+ * An asset cannot be issued before it existed. Purchase dates and assignment
+ * dates are generated independently, so every issue date is clamped to sit at
+ * least a week after the asset was received — otherwise the history reads as
+ * chronologically impossible on the very screen the timeline is shown on.
+ */
+function afterReceipt(asset: SeededAsset, date: Date): Date {
+  const earliest = addDays(asset.purchasedOn, 7);
+  return date < earliest ? earliest : date;
+}
+
+/** Nothing in the fixture may be dated in the future. */
+function inThePast(date: Date, atLeastDaysAgo = 1): Date {
+  const latest = addDays(TODAY, -atLeastDaysAgo);
+  return date > latest ? latest : date;
+}
+
+function laterOf(a: Date, b: Date): Date {
+  return a > b ? a : b;
+}
+
 // --- event collection -------------------------------------------------------
 
 type EventRow = Prisma.AssetEventCreateManyInput;
@@ -460,7 +481,7 @@ async function seedAssets(
     tagCounters.set(model.categoryCode, nextNumber);
 
     const assetTag = `${model.categoryCode}-${String(nextNumber).padStart(4, '0')}`;
-    const purchasedOn = addDays(TODAY, -randomInt(60, 1500));
+    const purchasedOn = addDays(TODAY, -randomInt(500, 2400));
     // Warranty is computed once, at creation, and stored (CLAUDE.md §7.6).
     const warrantyExpiresOn = addMonths(purchasedOn, model.warrantyMonths);
     const grades = CONDITION_BY_STATUS[status];
@@ -553,10 +574,14 @@ async function seedAssignmentsAndHistory(
   async function closedAssignment(
     asset: SeededAsset,
     employee: SeededEmployee,
-    issuedOn: Date,
-    returnedOn: Date,
+    requestedIssuedOn: Date,
+    requestedReturnedOn: Date,
     options: { transferred?: boolean } = {},
   ): Promise<void> {
+    // Issued after the asset existed, returned after it was issued, and
+    // neither in the future.
+    const issuedOn = inThePast(afterReceipt(asset, requestedIssuedOn), 2);
+    const returnedOn = inThePast(laterOf(requestedReturnedOn, addDays(issuedOn, 1)));
     const issuer = pick(issuers);
     const receiver = pick(issuers);
     const conditionOut = pick([ConditionGrade.NEW, ConditionGrade.GOOD]);
@@ -626,9 +651,10 @@ async function seedAssignmentsAndHistory(
   async function openAssignment(
     asset: SeededAsset,
     employee: SeededEmployee,
-    issuedOn: Date,
+    requestedIssuedOn: Date,
     options: { expectedReturnOn?: Date } = {},
   ): Promise<string> {
+    const issuedOn = inThePast(afterReceipt(asset, requestedIssuedOn));
     const issuer = pick(issuers);
     const conditionOut = pick([ConditionGrade.NEW, ConditionGrade.GOOD, ConditionGrade.FAIR]);
 
@@ -670,7 +696,7 @@ async function seedAssignmentsAndHistory(
   let employeeCursor = 0;
   for (const [index, asset] of assigned.entries()) {
     const priorHolders = index < 6 ? 3 : index < 10 ? 2 : 0;
-    let cursorDate = addDays(TODAY, -randomInt(700, 1400));
+    let cursorDate = afterReceipt(asset, addDays(TODAY, -randomInt(700, 1400)));
 
     for (let holder = 0; holder < priorHolders; holder += 1) {
       const heldDays = randomInt(90, 200);
@@ -682,7 +708,8 @@ async function seedAssignmentsAndHistory(
       cursorDate = addDays(returnedOn, randomInt(3, 20));
     }
 
-    const issuedOn = priorHolders > 0 ? cursorDate : addDays(TODAY, -randomInt(20, 500));
+    const issuedOn =
+      priorHolders > 0 ? cursorDate : afterReceipt(asset, addDays(TODAY, -randomInt(20, 500)));
     // A handful of open assignments are temporary loans with a due date, two of
     // which are already overdue so the reports have something to find.
     const expectedReturnOn =
@@ -699,7 +726,7 @@ async function seedAssignmentsAndHistory(
   for (const asset of pendingCheck) {
     const employee = nextEmployee(employeeCursor);
     employeeCursor += 1;
-    const issuedOn = addDays(TODAY, -randomInt(200, 600));
+    const issuedOn = afterReceipt(asset, addDays(TODAY, -randomInt(200, 600)));
     const returnedOn = addDays(TODAY, -randomInt(1, 12));
     const issuer = pick(issuers);
     const receiver = pick(issuers);
@@ -759,7 +786,7 @@ async function seedAssignmentsAndHistory(
     if (keepsHolder) {
       const employee = nextEmployee(employeeCursor);
       employeeCursor += 1;
-      await openAssignment(asset, employee, addDays(sentOn, -randomInt(120, 400)));
+      await openAssignment(asset, employee, afterReceipt(asset, addDays(sentOn, -randomInt(120, 400))));
       recordEvent({
         assetId: asset.id,
         eventType: AssetEventType.SENT_FOR_REPAIR,
@@ -786,11 +813,14 @@ async function seedAssignmentsAndHistory(
   // 4. Lost assets. Four went missing while issued, which writes off the
   //    assignment without a physical return (CLAUDE.md §5.3).
   for (const [index, asset] of lost.entries()) {
-    const lostOn = addDays(TODAY, -randomInt(20, 300));
     if (index < 4) {
       const employee = index < 2 ? employees.exited[index]! : nextEmployee(employeeCursor);
       if (index >= 2) employeeCursor += 1;
-      const issuedOn = addDays(lostOn, -randomInt(200, 500));
+      const issuedOn = inThePast(
+        afterReceipt(asset, addDays(TODAY, -randomInt(300, 800))),
+        30,
+      );
+      const lostOn = inThePast(addDays(issuedOn, randomInt(60, 250)), 5);
       const issuer = pick(issuers);
 
       const assignment = await prisma.assignment.create({
@@ -841,6 +871,7 @@ async function seedAssignmentsAndHistory(
         notes: 'Reported lost by the holder; police complaint reference on file',
       });
     } else {
+      const lostOn = inThePast(afterReceipt(asset, addDays(TODAY, -randomInt(20, 300))), 5);
       recordEvent({
         assetId: asset.id,
         eventType: AssetEventType.MARKED_LOST,
@@ -855,13 +886,15 @@ async function seedAssignmentsAndHistory(
 
   // 5. Retired assets, several of which had a holder first.
   for (const [index, asset] of retired.entries()) {
-    const retiredOn = addDays(TODAY, -randomInt(10, 250));
+    let retiredOn = inThePast(afterReceipt(asset, addDays(TODAY, -randomInt(10, 250))), 2);
     if (index < 6) {
       const employee = nextEmployee(employeeCursor);
       employeeCursor += 1;
-      const issuedOn = addDays(retiredOn, -randomInt(400, 900));
-      const returnedOn = addDays(retiredOn, -randomInt(5, 30));
+      const issuedOn = inThePast(afterReceipt(asset, addDays(TODAY, -randomInt(400, 900))), 40);
+      const returnedOn = inThePast(addDays(issuedOn, randomInt(200, 500)), 10);
       await closedAssignment(asset, employee, issuedOn, returnedOn);
+      // Retired after it came back, not before.
+      retiredOn = inThePast(laterOf(retiredOn, addDays(returnedOn, randomInt(2, 20))), 1);
     }
     recordEvent({
       assetId: asset.id,
@@ -885,7 +918,7 @@ async function seedAssignmentsAndHistory(
       index < employees.exited.length ? employees.exited[index]! : nextEmployee(employeeCursor);
     if (index >= employees.exited.length) employeeCursor += 1;
 
-    const issuedOn = addDays(TODAY, -randomInt(500, 1100));
+    const issuedOn = afterReceipt(asset, addDays(TODAY, -randomInt(500, 1100)));
     const returnedOn = addDays(issuedOn, randomInt(200, 400));
     await closedAssignment(asset, employee, issuedOn, returnedOn);
   }

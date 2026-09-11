@@ -1,0 +1,407 @@
+// IT Asset Management — Phase 1 schema (CLAUDE.md §5).
+//
+// Two rules this file must always obey:
+//   1. There is no current-holder column on `asset`. The holder is the
+//      employee on the single OPEN row in `assignment` (CLAUDE.md §2.1).
+//   2. `asset_event` is append-only: no updated_at, never updated, never
+//      deleted (CLAUDE.md §2.3).
+//
+// The partial unique index that enforces one open assignment per asset cannot
+// be expressed in Prisma schema language; it is created as raw SQL inside the
+// initial migration. Review every generated migration before applying it —
+// `prisma migrate dev` may propose dropping an index it cannot see here.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum LocationType {
+  OFFICE
+  STORE_ROOM
+  WAREHOUSE
+
+  @@map("location_type")
+}
+
+enum TrackingMode {
+  SERIALIZED
+  BULK
+
+  @@map("tracking_mode")
+}
+
+enum EmployeeStatus {
+  ACTIVE
+  EXITED
+
+  @@map("employee_status")
+}
+
+enum UserRole {
+  ADMIN
+  STORE_KEEPER
+  VIEWER
+
+  @@map("user_role")
+}
+
+enum AssetStatus {
+  IN_STOCK
+  ASSIGNED
+  RETURNED_PENDING_CHECK
+  IN_REPAIR
+  RETIRED
+  LOST
+
+  @@map("asset_status")
+}
+
+enum ConditionGrade {
+  NEW
+  GOOD
+  FAIR
+  POOR
+  DAMAGED
+
+  @@map("condition_grade")
+}
+
+enum AssignmentStatus {
+  OPEN
+  CLOSED
+  WRITTEN_OFF
+
+  @@map("assignment_status")
+}
+
+enum AssetEventType {
+  PURCHASED
+  STOCK_IN
+  ISSUED
+  RETURNED
+  INSPECTED
+  SENT_FOR_REPAIR
+  REPAIR_COMPLETED
+  TRANSFERRED
+  MARKED_LOST
+  WRITTEN_OFF
+  RETIRED
+  NOTE_ADDED
+
+  @@map("asset_event_type")
+}
+
+enum EventReferenceType {
+  ASSIGNMENT
+  REPAIR_TICKET
+  PURCHASE_ITEM
+
+  @@map("event_reference_type")
+}
+
+// ---------------------------------------------------------------------------
+// Auth
+// ---------------------------------------------------------------------------
+
+/// The IT staff who log in. Deliberately separate from `employee`: an app user
+/// may or may not also be an employee record (CLAUDE.md §5.1).
+model AppUser {
+  id           String    @id @default(uuid(7))
+  email        String    @unique
+  passwordHash String    @map("password_hash")
+  fullName     String    @map("full_name")
+  role         UserRole
+  isActive     Boolean   @default(true) @map("is_active")
+  lastLoginAt  DateTime? @map("last_login_at") @db.Timestamptz(6)
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  refreshTokens     RefreshToken[]
+  assignmentsIssued Assignment[]   @relation("AssignmentIssuedBy")
+  assignmentsClosed Assignment[]   @relation("AssignmentReceivedBy")
+  eventsPerformed   AssetEvent[]
+
+  @@index([isActive])
+  @@map("app_user")
+}
+
+/// Hashed refresh tokens, rotatable. `replacedBy` forms a rotation chain so a
+/// replayed token can be detected and the whole chain revoked.
+model RefreshToken {
+  id         String    @id @default(uuid(7))
+  userId     String    @map("user_id")
+  tokenHash  String    @unique @map("token_hash")
+  expiresAt  DateTime  @map("expires_at") @db.Timestamptz(6)
+  revokedAt  DateTime? @map("revoked_at") @db.Timestamptz(6)
+  replacedBy String?   @map("replaced_by")
+  userAgent  String?   @map("user_agent")
+  ipAddress  String?   @map("ip_address")
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user AppUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+  @@map("refresh_token")
+}
+
+// ---------------------------------------------------------------------------
+// Reference data
+// ---------------------------------------------------------------------------
+
+model Location {
+  id        String       @id @default(uuid(7))
+  name      String
+  type      LocationType
+  address   String?
+  city      String
+  isActive  Boolean      @default(true) @map("is_active")
+  createdAt DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdBy String?      @map("created_by")
+  updatedBy String?      @map("updated_by")
+
+  employees Employee[]
+  assets    Asset[]
+  events    AssetEvent[]
+
+  @@unique([name, city])
+  @@index([isActive])
+  @@map("location")
+}
+
+model Vendor {
+  id              String   @id @default(uuid(7))
+  name            String   @unique
+  contactPerson   String?  @map("contact_person")
+  phone           String?
+  email           String?
+  gstin           String?
+  address         String?
+  isServiceCentre Boolean  @default(false) @map("is_service_centre")
+  isActive        Boolean  @default(true) @map("is_active")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdBy       String?  @map("created_by")
+  updatedBy       String?  @map("updated_by")
+
+  @@index([isActive])
+  @@index([isServiceCentre])
+  @@map("vendor")
+}
+
+model AssetCategory {
+  id                      String       @id @default(uuid(7))
+  name                    String       @unique
+  code                    String       @unique
+  trackingMode            TrackingMode @map("tracking_mode")
+  requiresSerial          Boolean      @default(true) @map("requires_serial")
+  defaultUsefulLifeMonths Int?         @map("default_useful_life_months")
+  isActive                Boolean      @default(true) @map("is_active")
+  createdAt               DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt               DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdBy               String?      @map("created_by")
+  updatedBy               String?      @map("updated_by")
+
+  models AssetModel[]
+
+  @@index([isActive])
+  @@map("asset_category")
+}
+
+model AssetModel {
+  id                    String   @id @default(uuid(7))
+  categoryId            String   @map("category_id")
+  manufacturer          String
+  modelName             String   @map("model_name")
+  /// Shape varies per category: CPU/RAM/storage for a laptop, wattage for a
+  /// charger. Validated per-category at the service layer, not here.
+  specs                 Json     @default("{}")
+  defaultWarrantyMonths Int?     @map("default_warranty_months")
+  isActive              Boolean  @default(true) @map("is_active")
+  createdAt             DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdBy             String?  @map("created_by")
+  updatedBy             String?  @map("updated_by")
+
+  category AssetCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  assets   Asset[]
+
+  @@unique([categoryId, manufacturer, modelName])
+  @@index([categoryId])
+  @@index([isActive])
+  @@map("asset_model")
+}
+
+/// Never deleted. On exit, status becomes EXITED and dateExited is set, so
+/// every historical assignment keeps pointing at a real row (CLAUDE.md §2.2).
+model Employee {
+  id                 String         @id @default(uuid(7))
+  employeeCode       String         @unique @map("employee_code")
+  firstName          String         @map("first_name")
+  lastName           String         @map("last_name")
+  email              String         @unique
+  phone              String?
+  department         String
+  designation        String
+  locationId         String         @map("location_id")
+  dateJoined         DateTime       @map("date_joined") @db.Date
+  dateExited         DateTime?      @map("date_exited") @db.Date
+  status             EmployeeStatus @default(ACTIVE)
+  reportingManagerId String?        @map("reporting_manager_id")
+  createdAt          DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdBy          String?        @map("created_by")
+  updatedBy          String?        @map("updated_by")
+
+  location         Location     @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  reportingManager Employee?    @relation("EmployeeManager", fields: [reportingManagerId], references: [id], onDelete: SetNull)
+  directReports    Employee[]   @relation("EmployeeManager")
+  assignments      Assignment[]
+  events           AssetEvent[]
+
+  @@index([status])
+  @@index([department])
+  @@index([locationId])
+  @@index([lastName, firstName])
+  @@map("employee")
+}
+
+// ---------------------------------------------------------------------------
+// Inventory
+// ---------------------------------------------------------------------------
+
+/// One row per individually tracked physical unit. There is no holder column
+/// here by design — see `Assignment` (CLAUDE.md §2.1).
+model Asset {
+  id       String @id @default(uuid(7))
+  /// Immutable after creation; enforced in AssetsService, not by the database.
+  assetTag String @unique @map("asset_tag")
+  /// Unique where not null — Postgres treats NULLs as distinct, so a plain
+  /// unique index is already a partial one for this purpose.
+  serialNumber String? @unique @map("serial_number")
+
+  modelId String      @map("model_id")
+  status  AssetStatus @default(IN_STOCK)
+
+  conditionGrade ConditionGrade @map("condition_grade")
+  /// The asset's owning location (which store room it belongs to), not where
+  /// the current holder sits. Issuing does not change it.
+  locationId     String         @map("location_id")
+  /// FK added in the Phase 4 migration, once `purchase_item` exists.
+  purchaseItemId String?        @map("purchase_item_id")
+  /// Computed once at creation from purchase date + warranty months, never on
+  /// read (CLAUDE.md §7.6).
+  warrantyExpiresOn DateTime? @map("warranty_expires_on") @db.Date
+  notes             String?
+  /// Optimistic locking for concurrent edits of the same asset.
+  version           Int       @default(0)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdBy String?  @map("created_by")
+  updatedBy String?  @map("updated_by")
+
+  model       AssetModel   @relation(fields: [modelId], references: [id], onDelete: Restrict)
+  location    Location     @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  assignments Assignment[]
+  events      AssetEvent[]
+
+  @@index([status])
+  @@index([modelId])
+  @@index([locationId])
+  @@index([conditionGrade])
+  @@index([warrantyExpiresOn])
+  @@index([status, locationId])
+  @@map("asset")
+}
+
+// ---------------------------------------------------------------------------
+// The assignment ledger — the source of truth for custody
+// ---------------------------------------------------------------------------
+
+model Assignment {
+  id         String @id @default(uuid(7))
+  assetId    String @map("asset_id")
+  employeeId String @map("employee_id")
+
+  issuedOn         DateTime       @map("issued_on") @db.Date
+  issuedBy         String         @map("issued_by")
+  expectedReturnOn DateTime?      @map("expected_return_on") @db.Date
+  conditionOut     ConditionGrade @map("condition_out")
+  issueRemarks     String?        @map("issue_remarks")
+
+  /// Set only on a real physical return. A write-off leaves this null.
+  returnedOn    DateTime?       @map("returned_on") @db.Date
+  /// Set whenever the row leaves OPEN, for both CLOSED and WRITTEN_OFF.
+  closedOn      DateTime?       @map("closed_on") @db.Date
+  receivedBy    String?         @map("received_by")
+  conditionIn   ConditionGrade? @map("condition_in")
+  returnRemarks String?         @map("return_remarks")
+
+  status AssignmentStatus @default(OPEN)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  asset    Asset    @relation(fields: [assetId], references: [id], onDelete: Restrict)
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  issuer   AppUser  @relation("AssignmentIssuedBy", fields: [issuedBy], references: [id], onDelete: Restrict)
+  receiver AppUser? @relation("AssignmentReceivedBy", fields: [receivedBy], references: [id], onDelete: Restrict)
+
+  // The one-open-assignment-per-asset rule is a partial unique index created in
+  // the initial migration (CLAUDE.md §2.4) — Prisma cannot express it here.
+  @@index([assetId, issuedOn(sort: Desc)])
+  @@index([employeeId, status])
+  @@index([status])
+  @@index([expectedReturnOn])
+  @@map("assignment")
+}
+
+// ---------------------------------------------------------------------------
+// Audit trail — append-only
+// ---------------------------------------------------------------------------
+
+/// Written inside the same transaction as the change it records. Rows here are
+/// never updated and never deleted; a mistake is corrected by a new NOTE_ADDED
+/// row (CLAUDE.md §2.3). Note the absence of `updated_at` — having one would
+/// imply these rows can change.
+model AssetEvent {
+  id          String         @id @default(uuid(7))
+  assetId     String         @map("asset_id")
+  eventType   AssetEventType @map("event_type")
+  occurredAt  DateTime       @default(now()) @map("occurred_at") @db.Timestamptz(6)
+  performedBy String         @map("performed_by")
+
+  fromStatus AssetStatus? @map("from_status")
+  toStatus   AssetStatus? @map("to_status")
+  employeeId String?      @map("employee_id")
+  locationId String?      @map("location_id")
+
+  /// Polymorphic pointer to whatever caused the event.
+  referenceType EventReferenceType? @map("reference_type")
+  referenceId   String?             @map("reference_id")
+
+  notes     String?
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  asset    Asset     @relation(fields: [assetId], references: [id], onDelete: Restrict)
+  actor    AppUser   @relation(fields: [performedBy], references: [id], onDelete: Restrict)
+  employee Employee? @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  location Location? @relation(fields: [locationId], references: [id], onDelete: Restrict)
+
+  /// The asset history page is the most-used read in the system (CLAUDE.md §5.4).
+  @@index([assetId, occurredAt(sort: Desc)])
+  @@index([eventType, occurredAt(sort: Desc)])
+  @@index([employeeId, occurredAt(sort: Desc)])
+  @@index([referenceType, referenceId])
+  @@map("asset_event")
+}

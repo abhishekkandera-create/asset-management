@@ -16,9 +16,13 @@ services:
 
     # pnpm needs enabling, the shared package must be built before the API that
     # imports it, and Prisma's client is generated from the schema at build time.
+    # --prod=false is load-bearing: NODE_ENV is production below, and pnpm
+    # takes that as a signal to skip devDependencies. Every build tool we need
+    # — typescript, prisma, @nestjs/cli — lives there, so without it the build
+    # fails with "prisma: not found" and "nest: not found".
     buildCommand: |
       corepack enable
-      pnpm install --frozen-lockfile
+      pnpm install --frozen-lockfile --prod=false
       pnpm --filter @asset/shared build
       pnpm --filter @asset/api db:generate
       pnpm --filter @asset/api build

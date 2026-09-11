@@ -157,7 +157,7 @@ fires both requests genuinely in parallel and asserts exactly one wins.
 
 | Layer | Choice |
 |---|---|
-| **Backend** | Node 20 · NestJS 10 · TypeScript strict · Prisma 6 · PostgreSQL 16 |
+| **Backend** | Node 24 LTS · NestJS 10 · TypeScript strict · Prisma 6 · PostgreSQL 16 |
 | **Validation** | Zod schemas shared between API and web via `nestjs-zod` |
 | **Auth** | argon2id passwords · 15-min JWT access tokens · rotating 7-day refresh tokens stored as SHA-256 digests |
 | **Frontend** | React 18 · Vite · TailwindCSS · shadcn/ui · TanStack Query & Table · React Hook Form · Recharts |
@@ -171,10 +171,16 @@ sides break in the same compile — the contract can't drift.
 
 ## Quick start
 
-Requires **Node 20**, **pnpm 9** and **Docker**.
+Requires **Node 24 LTS**, **pnpm 9** and **Docker**.
+
+> **On the Node version.** `CLAUDE.md` §3 specifies Node 20 LTS, which was correct
+> when it was written. Node 20 reached end of life in April 2026, and Vercel
+> refuses to build on it from 1 October 2026. The project therefore runs on
+> Node 24 LTS — nothing else about the stack changed, and the full suite passes
+> unchanged.
 
 ```bash
-nvm use                 # reads .nvmrc
+nvm use                 # reads .nvmrc (24.21.0)
 cp .env.example .env    # defaults work as-is
 docker compose up -d    # Postgres, Redis, MinIO (bucket auto-created)
 pnpm install

@@ -1,0 +1,91 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: asset_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-asset}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-asset_dev_password}
+      POSTGRES_DB: ${POSTGRES_DB:-asset_management}
+    ports:
+      - '${POSTGRES_PORT:-5442}:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-asset} -d ${POSTGRES_DB:-asset_management}']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Separate database for integration tests, so `pnpm test` never touches dev data.
+  postgres_test:
+    image: postgres:16
+    container_name: asset_postgres_test
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-asset}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-asset_dev_password}
+      POSTGRES_DB: asset_management_test
+    ports:
+      - '${POSTGRES_TEST_PORT:-5443}:5432'
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-asset} -d asset_management_test']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7
+    container_name: asset_redis
+    restart: unless-stopped
+    ports:
+      - '${REDIS_PORT:-6389}:6379'
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  minio:
+    image: minio/minio:latest
+    container_name: asset_minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:-minioadmin}
+    ports:
+      - '${MINIO_PORT:-9010}:9000'
+      - '${MINIO_CONSOLE_PORT:-9011}:9001'
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ['CMD', 'mc', 'ready', 'local']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # One-shot: creates the bucket then exits. `docker compose up -d` is enough.
+  minio_init:
+    image: minio/mc:latest
+    container_name: asset_minio_init
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 ${S3_ACCESS_KEY:-minioadmin} ${S3_SECRET_KEY:-minioadmin} &&
+      mc mb --ignore-existing local/${S3_BUCKET:-asset-management} &&
+      mc anonymous set none local/${S3_BUCKET:-asset-management} &&
+      echo 'bucket ${S3_BUCKET:-asset-management} ready'
+      "
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:

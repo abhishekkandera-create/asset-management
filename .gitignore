@@ -1,0 +1,21 @@
+node_modules/
+dist/
+build/
+coverage/
+.env
+.env.local
+*.log
+.DS_Store
+.turbo/
+apps/web/dist/
+apps/api/dist/
+.pnpm-store/
+*.tsbuildinfo
+
+# Build artefacts must never land in a source tree; if they do, something is
+# emitting where it should be type-checking only.
+apps/*/src/**/*.d.ts
+apps/*/src/**/*.js.map
+packages/*/src/**/*.d.ts
+packages/*/src/**/*.js
+packages/*/src/**/*.js.map

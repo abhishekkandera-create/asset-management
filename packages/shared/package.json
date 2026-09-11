@@ -1,0 +1,25 @@
+{
+  "name": "@asset/shared",
+  "version": "0.1.0",
+  "private": true,
+  "type": "commonjs",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsc -p tsconfig.json --watch --preserveWatchOutput",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint src --ext .ts",
+    "test": "echo \"no tests in @asset/shared\" && exit 0",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2"
+  }
+}

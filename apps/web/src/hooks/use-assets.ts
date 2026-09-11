@@ -9,6 +9,7 @@ import type {
   AddAssetNote,
   Asset,
   AssetEvent,
+  CreateAsset,
   InspectAsset,
   IssueAsset,
   ListAssetsQuery,
@@ -58,6 +59,17 @@ export function useAssetHistory(
     queryFn: ({ signal }) =>
       api.get<Paginated<AssetEvent>>(`/assets/${id}/history`, { page, pageSize: 50 }, signal),
     enabled: Boolean(id),
+  });
+}
+
+export function useCreateAsset() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: CreateAsset) => api.post<Asset>('/assets', body),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: assetKeys.lists() });
+      void queryClient.invalidateQueries({ queryKey: dashboardKeys.all });
+    },
   });
 }
 

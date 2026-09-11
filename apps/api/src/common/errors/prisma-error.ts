@@ -10,7 +10,19 @@ import {
 /** Index name from the §2.4 migration. Its violation is the concurrency guard. */
 const ONE_OPEN_ASSIGNMENT_INDEX = 'assignment_one_open_per_asset';
 
+/**
+ * Prisma reports a uniqueness violation by the *columns* involved, scoped to
+ * the model — `{ modelName: 'Asset', target: ['asset_tag'] }` — not by the
+ * constraint name Postgres used. Both shapes are mapped: the `model:column`
+ * form is what the client actually emits, and the bare constraint name is what
+ * a raw query reports.
+ */
 const UNIQUE_TARGET_TO_CODE: Record<string, ErrorCode> = {
+  'Asset:asset_tag': ErrorCode.DUPLICATE_ASSET_TAG,
+  'Asset:serial_number': ErrorCode.DUPLICATE_SERIAL_NUMBER,
+  'Employee:employee_code': ErrorCode.DUPLICATE_EMPLOYEE_CODE,
+  'Employee:email': ErrorCode.DUPLICATE_EMPLOYEE_EMAIL,
+
   asset_asset_tag_key: ErrorCode.DUPLICATE_ASSET_TAG,
   asset_serial_number_key: ErrorCode.DUPLICATE_SERIAL_NUMBER,
   employee_employee_code_key: ErrorCode.DUPLICATE_EMPLOYEE_CODE,
@@ -41,7 +53,12 @@ export function translatePrismaError(error: unknown): DomainError | null {
       if (isOpenAssignmentConflict(error)) {
         return new AssetAlreadyAssignedError(String(error.meta?.['assetId'] ?? 'unknown'));
       }
-      const code = UNIQUE_TARGET_TO_CODE[target] ?? ErrorCode.DUPLICATE_RECORD;
+      const modelName = error.meta?.['modelName'];
+      const scoped = typeof modelName === 'string' ? `${modelName}:${target}` : null;
+      const code =
+        (scoped ? UNIQUE_TARGET_TO_CODE[scoped] : undefined) ??
+        UNIQUE_TARGET_TO_CODE[target] ??
+        ErrorCode.DUPLICATE_RECORD;
       return new DuplicateRecordError(
         `A record with the same ${target || 'unique value'} already exists`,
         code,

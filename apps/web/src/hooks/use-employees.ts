@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient, type UseQueryResult } from '@tan
 import type {
   Assignment,
   Clearance,
+  CreateEmployee,
   Employee,
   EmployeeHoldings,
   ExitEmployee,
@@ -81,6 +82,19 @@ export function useDepartments(): UseQueryResult<string[]> {
     queryKey: employeeKeys.departments(),
     queryFn: ({ signal }) => api.get<string[]>('/employees/departments', undefined, signal),
     staleTime: 10 * 60_000,
+  });
+}
+
+export function useCreateEmployee() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: CreateEmployee) => api.post<Employee>('/employees', body),
+    onSuccess: () => {
+      // The new person changes the list, the department filter options and the
+      // active-employee count on the dashboard.
+      void queryClient.invalidateQueries({ queryKey: employeeKeys.all });
+      void queryClient.invalidateQueries({ queryKey: dashboardKeys.all });
+    },
   });
 }
 

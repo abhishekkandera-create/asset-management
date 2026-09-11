@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import type { ColumnDef, SortingState } from '@tanstack/react-table';
-import { Download, PackageSearch, Search, X } from 'lucide-react';
+import { Download, PackageSearch, Plus, Search, X } from 'lucide-react';
 import {
   ASSET_STATUSES,
   CONDITION_GRADES,
@@ -12,6 +12,7 @@ import {
 import { useAssets } from '@/hooks/use-assets';
 import { useCategories, useLocations, useModels } from '@/hooks/use-masters';
 import { useDebounced } from '@/hooks/use-debounced';
+import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
 import { api } from '@/lib/api-client';
 import { downloadCsv, toCsv } from '@/lib/csv';
@@ -19,6 +20,7 @@ import { formatDate } from '@/lib/utils';
 import { messageOf } from '@/lib/api-error';
 import { DataTable } from '@/components/data-table';
 import { EmptyState } from '@/components/empty-state';
+import { CreateAssetDialog } from '@/components/asset-actions/create-asset-dialog';
 import { StatusBadge, statusLabel } from '@/components/status-badge';
 import { ConditionBadge, conditionLabel } from '@/components/condition-badge';
 import { Button } from '@/components/ui/button';
@@ -37,6 +39,8 @@ const PAGE_SIZE = 25;
 export function AssetsListPage(): JSX.Element {
   const navigate = useNavigate();
   const toast = useToast();
+  const { can } = useAuth();
+  const [isCreating, setIsCreating] = React.useState(false);
 
   // Filters live in the URL, so a filtered view is a shareable link and the
   // back button behaves.
@@ -267,11 +271,27 @@ export function AssetsListPage(): JSX.Element {
             assignment.
           </p>
         </div>
-        <Button variant="outline" onClick={handleExport} loading={isExporting}>
-          <Download className="h-4 w-4" aria-hidden />
-          Export CSV
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={handleExport} loading={isExporting}>
+            <Download className="h-4 w-4" aria-hidden />
+            Export CSV
+          </Button>
+          {can('ADMIN') ? (
+            <Button onClick={() => setIsCreating(true)}>
+              <Plus className="h-4 w-4" aria-hidden />
+              Add asset
+            </Button>
+          ) : null}
+        </div>
       </header>
+
+      {isCreating ? (
+        <CreateAssetDialog
+          open
+          onOpenChange={setIsCreating}
+          onCreated={(asset) => navigate(`/assets/${asset.id}`)}
+        />
+      ) : null}
 
       {isError ? (
         <div className="rounded-md border border-destructive/50 bg-destructive/5 p-4 text-sm text-destructive">
@@ -318,6 +338,11 @@ export function AssetsListPage(): JSX.Element {
                   }}
                 >
                   Clear filters
+                </Button>
+              ) : can('ADMIN') ? (
+                <Button onClick={() => setIsCreating(true)}>
+                  <Plus className="h-4 w-4" aria-hidden />
+                  Add the first asset
                 </Button>
               ) : null
             }

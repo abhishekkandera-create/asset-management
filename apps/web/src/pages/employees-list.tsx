@@ -1,15 +1,17 @@
 import * as React from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import type { ColumnDef } from '@tanstack/react-table';
-import { Search, UserSearch, X } from 'lucide-react';
+import { Plus, Search, UserSearch, X } from 'lucide-react';
 import { EMPLOYEE_STATUSES, type Employee, type EmployeeStatus } from '@asset/shared';
 import { useDepartments, useEmployees } from '@/hooks/use-employees';
 import { useLocations } from '@/hooks/use-masters';
 import { useDebounced } from '@/hooks/use-debounced';
+import { useAuth } from '@/hooks/use-auth';
 import { formatDate } from '@/lib/utils';
 import { messageOf } from '@/lib/api-error';
 import { DataTable } from '@/components/data-table';
 import { EmptyState } from '@/components/empty-state';
+import { CreateEmployeeDialog } from '@/components/create-employee-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -25,6 +27,8 @@ const ANY = '__any__';
 
 export function EmployeesListPage(): JSX.Element {
   const navigate = useNavigate();
+  const { can } = useAuth();
+  const [isCreating, setIsCreating] = React.useState(false);
   const [params, setParams] = useSearchParams();
   const [searchInput, setSearchInput] = React.useState(params.get('search') ?? '');
   const debouncedSearch = useDebounced(searchInput, 300);
@@ -142,13 +146,29 @@ export function EmployeesListPage(): JSX.Element {
 
   return (
     <div className="mx-auto max-w-[1200px] space-y-5">
-      <header>
-        <h1 className="text-2xl font-semibold tracking-tight">Employees</h1>
-        <p className="text-sm text-muted-foreground">
-          People are records here, not users. Exited employees stay in the system so their history
-          survives.
-        </p>
+      <header className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Employees</h1>
+          <p className="text-sm text-muted-foreground">
+            People are records here, not users. Exited employees stay in the system so their
+            history survives.
+          </p>
+        </div>
+        {can('ADMIN') ? (
+          <Button onClick={() => setIsCreating(true)}>
+            <Plus className="h-4 w-4" aria-hidden />
+            Add employee
+          </Button>
+        ) : null}
       </header>
+
+      {isCreating ? (
+        <CreateEmployeeDialog
+          open
+          onOpenChange={setIsCreating}
+          onCreated={(employee) => navigate(`/employees/${employee.id}`)}
+        />
+      ) : null}
 
       {isError ? (
         <div className="rounded-md border border-destructive/50 bg-destructive/5 p-4 text-sm text-destructive">
@@ -170,7 +190,15 @@ export function EmployeesListPage(): JSX.Element {
             description={
               hasFilters
                 ? 'Try a different search or clear a filter.'
-                : 'Employee records are added by an administrator.'
+                : 'Add the people who will be issued hardware.'
+            }
+            action={
+              !hasFilters && can('ADMIN') ? (
+                <Button onClick={() => setIsCreating(true)}>
+                  <Plus className="h-4 w-4" aria-hidden />
+                  Add the first employee
+                </Button>
+              ) : null
             }
             className="border-0"
           />

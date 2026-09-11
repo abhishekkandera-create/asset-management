@@ -25,6 +25,8 @@ interface ActionDialogProps {
   error: unknown;
   onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
   children: React.ReactNode;
+  /** Widen the dialog for forms with more than a handful of fields. */
+  className?: string;
 }
 
 /**
@@ -43,16 +45,17 @@ export function ActionDialog({
   error,
   onSubmit,
   children,
+  className,
 }: ActionDialogProps): JSX.Element {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className={className}>
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={onSubmit} className="space-y-4" noValidate>
+        <form onSubmit={onSubmit} className="max-h-[70vh] space-y-4 overflow-y-auto pr-1" noValidate>
           {error ? (
             <Alert variant="destructive">
               <AlertCircle className="h-4 w-4" aria-hidden />

@@ -36,7 +36,7 @@ describe('translatePrismaError', () => {
     ).toBe(true);
   });
 
-  it('names the specific duplicate for tags, serials and employee codes', () => {
+  it('names the specific duplicate from the constraint name a raw query reports', () => {
     expect(translatePrismaError(uniqueViolation('asset_asset_tag_key'))?.code).toBe(
       ErrorCode.DUPLICATE_ASSET_TAG,
     );
@@ -46,6 +46,39 @@ describe('translatePrismaError', () => {
     expect(translatePrismaError(uniqueViolation('employee_employee_code_key'))?.code).toBe(
       ErrorCode.DUPLICATE_EMPLOYEE_CODE,
     );
+  });
+
+  it('names the specific duplicate from the model and column Prisma actually emits', () => {
+    // This is the shape the client really produces; the constraint-name form
+    // above never fires through the ORM.
+    const violation = (modelName: string, column: string) =>
+      new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
+        code: 'P2002',
+        clientVersion: 'test',
+        meta: { modelName, target: [column] },
+      });
+
+    expect(translatePrismaError(violation('Asset', 'asset_tag'))?.code).toBe(
+      ErrorCode.DUPLICATE_ASSET_TAG,
+    );
+    expect(translatePrismaError(violation('Asset', 'serial_number'))?.code).toBe(
+      ErrorCode.DUPLICATE_SERIAL_NUMBER,
+    );
+    expect(translatePrismaError(violation('Employee', 'employee_code'))?.code).toBe(
+      ErrorCode.DUPLICATE_EMPLOYEE_CODE,
+    );
+    expect(translatePrismaError(violation('Employee', 'email'))?.code).toBe(
+      ErrorCode.DUPLICATE_EMPLOYEE_EMAIL,
+    );
+  });
+
+  it('does not confuse the same column name on a different model', () => {
+    const violation = new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
+      code: 'P2002',
+      clientVersion: 'test',
+      meta: { modelName: 'Vendor', target: ['email'] },
+    });
+    expect(translatePrismaError(violation)?.code).toBe(ErrorCode.DUPLICATE_RECORD);
   });
 
   it('falls back to a generic duplicate for an unmapped constraint', () => {
